@@ -1,15 +1,13 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
-{-# OPTIONS_GHC -fno-cse #-}
 
 module Main (main) where
 
+import Args
 import qualified Data.List as L
 import qualified Data.MultiMap as M
 import Data.Traversable (forM)
-import System.Console.CmdArgs
-import System.Directory (getDirectoryContents)
+import System.Directory
 import System.IO (hPutStrLn, stderr)
 import Text.Printf (printf)
 import Text.RE.TDFA.String (RE, matchedText, matches, re, (*=~), (?=~))
@@ -20,11 +18,23 @@ type FileContent = String
 
 type Tags = M.MultiMap Tag FilePath
 
+fromLast :: Eq a => a -> [a] -> [a]
+fromLast x = reverse . takeWhile (/= x) . reverse
+
+extension :: FilePath -> String
+extension = fromLast '.'
+
+basename :: FilePath -> FilePath
+basename = fromLast '/'
+
+joinPath :: FilePath -> FilePath -> FilePath
+joinPath l r = l ++ "/" ++ r
+
 getZettels :: FilePath -> IO [FilePath]
-getZettels f = mdFiles <$> getDirectoryContents f
+getZettels f = map (joinPath f) . mdFiles <$> getDirectoryContents f
   where
     mdFiles :: [FilePath] -> [FilePath]
-    mdFiles = filter (\a -> ".md" == dropWhile (/= '.') a)
+    mdFiles = filter ((== "md") . extension)
 
 getTags :: FilePath -> IO [Tag]
 getTags zettelPath = do
@@ -61,7 +71,7 @@ allTags paths = do
   return $ asMap tags
 
 print_ :: Tags -> String
-print_ m =
+print_ tagMap =
   printf
     "Found %d Tags in %d Zettel.\n\
     \\n\
@@ -70,12 +80,12 @@ print_ m =
     \Zettel by Tag:\n\
     \%s"
     (length tags)
-    (length . L.nub . concat . M.elems $ m)
+    (length . L.nub . concat . M.elems $ tagMap)
     (L.intercalate ", " tags) -- list of tags
     (L.intercalate "\n\n" (map showTag tags)) -- <tag>:\n<files>
   where
-    tags = M.keys m
-    showTag t = "  " ++ t ++ ":\n    " ++ L.intercalate "\n    " (M.lookup t m)
+    tags = M.keys tagMap
+    showTag t = "  " ++ t ++ ":\n    " ++ L.intercalate "\n    " (map basename $ M.lookup t tagMap)
 
 printStats :: Tags -> String
 printStats tags = printf "%s" (L.intercalate "\n" $ map usage $ M.keys tags)
@@ -83,42 +93,12 @@ printStats tags = printf "%s" (L.intercalate "\n" $ map usage $ M.keys tags)
     usage :: Tag -> String
     usage tag = printf "%s: %d" tag (length $ M.lookup tag tags)
 
-data Mode' = Overview | Stats deriving (Show, Data)
-
-data Zettel = Zettel {path :: FilePath, mode :: Mode'}
-  deriving (Show, Data, Typeable)
-
-zettel =
-  Zettel
-    { path = "." &= typDir,
-      mode =
-        enum
-          [ Overview &= help "Print overview",
-            Stats &= help "Show stats"
-          ]
-    }
-    &= helpArg [explicit, name "h", name "help"]
-    &= versionArg [explicit, name "v", name "version"]
+run :: Zettel -> IO ()
+run (Zettel path' mode') = case mode' of
+  Overview -> putStrLn . print_ =<< allTags =<< getZettels path'
+  Stats -> putStrLn . printStats =<< allTags =<< getZettels path'
+  Validate -> putStrLn "Not implemented yet"
 
 main :: IO ()
 main = do
-  cmdArgs zettel >>= print
-
--- data Zettel
---   = List {path :: FilePath}
---   | Stats {path :: FilePath}
---   deriving (Show, Data, Typeable)
---
--- -- I could be better off using one "mode" and a "--mode" argument that defaults to summary
---
--- allModes :: [Zettel]
--- allModes =
---   [ List {path = def},
---     Stats {path = def}
---   ]
---
--- main :: IO ()
--- main = do
---   cmdArgs (modes allModes) >>= \case
---     List p -> putStrLn p
---     _ -> putStrLn "other"
+  parseArgs >>= run
