@@ -26,7 +26,6 @@ source-repository head
 library
   exposed-modules:
       Args
-      Lib
   other-modules:
       Paths_zettel
   autogen-modules:
@@ -37,6 +36,7 @@ library
   build-depends:
       base >=4.7 && <5
     , cmdargs
+    , containers
     , directory
     , multimap
     , regex
@@ -54,6 +54,7 @@ executable zettel-exe
   build-depends:
       base >=4.7 && <5
     , cmdargs
+    , containers
     , directory
     , multimap
     , regex
@@ -73,6 +74,7 @@ test-suite zettel-test
   build-depends:
       base >=4.7 && <5
     , cmdargs
+    , containers
     , directory
     , multimap
     , regex
